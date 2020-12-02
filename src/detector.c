@@ -1603,6 +1603,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
     int names_size = 0;
+    printf("\n filename %s", filename);
     char **names = get_labels_custom(name_list, &names_size); //get_labels(name_list);
 
     image **alphabet = load_alphabet();
