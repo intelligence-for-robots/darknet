@@ -1,5 +1,11 @@
 # Yolo v4, v3 and v2 for Windows and Linux
 
+```
+python darknet_images.py --weights ./data/backup/yolo-obj_900.weights --config_file yolo-obj.cfg --data_file ./data/obj.data
+
+./darknet detector train data/obj.data yolo-obj.cfg data/backup/yolo-obj_900.weights
+```
+
 ## (neural networks for object detection)
 
 Paper Yolo v4: https://arxiv.org/abs/2004.10934
