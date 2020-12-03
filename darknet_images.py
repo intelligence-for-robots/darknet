@@ -7,6 +7,9 @@ import time
 import cv2
 import numpy as np
 import darknet
+import pytesseract
+from PIL import Image, ImageEnhance
+# from skimage.segmentation import clear_border
 
 
 def parser():
@@ -20,11 +23,11 @@ def parser():
                         help="number of images to be processed at the same time")
     parser.add_argument("--weights", default="yolov4.weights",
                         help="yolo weights path")
-    parser.add_argument("--dont_show", action='store_true',
+    parser.add_argument("--dont_show", action="store_true",
                         help="windown inference display. For headless systems")
-    parser.add_argument("--ext_output", action='store_true',
+    parser.add_argument("--ext_output", action="store_true",
                         help="display bbox coordinates of detected objects")
-    parser.add_argument("--save_labels", action='store_true',
+    parser.add_argument("--save_labels", action="store_true",
                         help="save detections bbox for each image in yolo format")
     parser.add_argument("--config_file", default="./cfg/yolov4.cfg",
                         help="path to config file")
@@ -49,7 +52,7 @@ def check_arguments_errors(args):
 
 def check_batch_shape(images, batch_size):
     """
-        Image sizes should be the same width and height
+    Image sizes should be the same width and height
     """
     shapes = [image.shape for image in images]
     if len(set(shapes)) > 1:
@@ -66,8 +69,8 @@ def load_images(images_path):
     In other case, it's a folder, return a list with names of each
     jpg, jpeg and png file
     """
-    input_path_extension = images_path.split('.')[-1]
-    if input_path_extension in ['jpg', 'jpeg', 'png']:
+    input_path_extension = images_path.split(".")[-1]
+    if input_path_extension in ["jpg", "jpeg", "png"]:
         return [images_path]
     elif input_path_extension == "txt":
         with open(images_path, "r") as f:
@@ -162,6 +165,7 @@ def save_annotations(name, image, detections, class_names):
     """
     Files saved with image_name.txt and relative coordinates
     """
+    print("save_annotations: {}".format(name))
     file_name = name.split(".")[:-1][0] + ".txt"
     with open(file_name, "w") as f:
         for label, confidence, bbox in detections:
@@ -174,14 +178,14 @@ def batch_detection_example():
     args = parser()
     check_arguments_errors(args)
     batch_size = 3
-    random.seed(3)  # deterministic bbox colors
+    random.seed(3) # deterministic bbox colors
     network, class_names, class_colors = darknet.load_network(
         args.config_file,
         args.data_file,
         args.weights,
         batch_size=batch_size
     )
-    image_names = ['data/horses.jpg', 'data/horses.jpg', 'data/eagle.jpg']
+    image_names = ["data/horses.jpg", "data/horses.jpg", "data/eagle.jpg"]
     images = [cv2.imread(image) for image in image_names]
     images, detections,  = batch_detection(network, images, class_names,
                                            class_colors, batch_size=batch_size)
@@ -194,7 +198,7 @@ def main():
     args = parser()
     check_arguments_errors(args)
 
-    random.seed(3)  # deterministic bbox colors
+    random.seed(3) # deterministic bbox colors
     network, class_names, class_colors = darknet.load_network(
         args.config_file,
         args.data_file,
@@ -219,13 +223,61 @@ def main():
             )
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
-        darknet.print_detections(detections, args.ext_output)
-        fps = int(1/(time.time() - prev_time))
-        print("FPS: {}".format(fps))
+        # darknet.print_detections(detections, args.ext_output)
+        secs = (time.time() - prev_time)
+
+        for label, confidence, bbox in detections:
+            x, y, w, h = bbox
+            print("bbox image:\nx{:.4f} y{:.4f} w{:.4f} h{:.4f}".format(x, y, w, h))
+
+            img = cv2.imread(image_name)
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            h, w, c = img.shape
+            print("h{} w{}".format(h, w))
+
+            rx, ry, rw, rh = convert2relative(image, bbox)
+            print("relative:\nx{:.4f} y{:.4f} w{:.4f} h{:.4f}".format(rx, ry, rw, rh))
+
+            img_x = int(rx*w)
+            img_y = int(ry*h)
+            img_w = int(rw*w/2)
+            img_h = int(rh*h/2)
+            
+            img_y_margin = 0 # int(0.025*h)
+            img_x_margin = 0 # int(0.025*w)
+            img_y_min = max(img_y-img_h-img_y_margin, 0)
+            img_y_max = min(img_y+img_h+img_y_margin, h-1)
+            img_x_min = max(img_x-img_w-img_x_margin, 0)
+            img_x_max = min(img_x+img_w-img_x_margin, w-1)
+            print("min/max img:\nx{:.4f} y{:.4f} x{:.4f} y{:.4f}".format(img_x_min, img_y_min, img_x_max, img_y_max))
+            img_crop = img_rgb[img_y_min:img_y_max,
+                               img_x_min:img_x_max]
+
+            img_crop_pil = Image.fromarray(img_crop)
+            enhancer = ImageEnhance.Contrast(img_crop_pil)
+            img_crop_pil = enhancer.enhance(5)
+            enhancer = ImageEnhance.Sharpness(img_crop_pil)
+            img_crop_pil = enhancer.enhance(4)
+
+            img_crop = np.asarray(img_crop_pil)
+            # img_crop = cv2.erode(img_crop, None, iterations=1)
+            # img_crop = cv2.dilate(img_crop, None, iterations=1)
+            img_crop = cv2.cvtColor(img_crop, cv2.COLOR_RGB2GRAY)
+            t, img_crop = cv2.threshold(img_crop, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+            # img_crop = clear_border(img_crop)
+
+            text = pytesseract.image_to_string(img_crop)
+            print("OCR: " + text)
+
+            if not args.dont_show:
+                cv2.imshow("img_rgb", img_rgb)
+                cv2.imshow("img_crop", img_crop)
+
+        print("secs: {}".format(secs))
         if not args.dont_show:
-            cv2.imshow('Inference', image)
-            if cv2.waitKey() & 0xFF == ord('q'):
-                break
+            cv2.imshow("Inference", image)
+        if not args.dont_show & cv2.waitKey() & 0xFF == ord("q"):
+            break
         index += 1
 
 
