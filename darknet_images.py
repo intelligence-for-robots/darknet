@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import darknet
 import pytesseract
+import easyocr
 from PIL import Image, ImageEnhance
 # from skimage.segmentation import clear_border
 
@@ -243,39 +244,49 @@ def main():
             img_w = int(rw*w/2)
             img_h = int(rh*h/2)
             
-            img_y_margin = 0 # int(0.025*h)
-            img_x_margin = 0 # int(0.025*w)
+            img_y_margin = int(0.025*h)
+            img_x_margin = int(0.025*w)
             img_y_min = max(img_y-img_h-img_y_margin, 0)
             img_y_max = min(img_y+img_h+img_y_margin, h-1)
             img_x_min = max(img_x-img_w-img_x_margin, 0)
-            img_x_max = min(img_x+img_w-img_x_margin, w-1)
+            img_x_max = min(img_x+img_w+img_x_margin, w-1)
             print("min/max img:\nx{:.4f} y{:.4f} x{:.4f} y{:.4f}".format(img_x_min, img_y_min, img_x_max, img_y_max))
             img_crop = img_rgb[img_y_min:img_y_max,
                                img_x_min:img_x_max]
 
+            dim = (img_x_max-img_x_min)*2, (img_y_max-img_y_min)*2
+            img_crop = cv2.resize(img_crop, dim, interpolation=cv2.INTER_AREA)
+
+            """
             img_crop_pil = Image.fromarray(img_crop)
             enhancer = ImageEnhance.Contrast(img_crop_pil)
-            img_crop_pil = enhancer.enhance(5)
+            img_crop_pil = enhancer.enhance(2)
             enhancer = ImageEnhance.Sharpness(img_crop_pil)
-            img_crop_pil = enhancer.enhance(4)
+            img_crop_pil = enhancer.enhance(2)
 
             img_crop = np.asarray(img_crop_pil)
-            # img_crop = cv2.erode(img_crop, None, iterations=1)
-            # img_crop = cv2.dilate(img_crop, None, iterations=1)
+            element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
+            img_crop = cv2.erode(img_crop, None, element, iterations=1)
+            img_crop = cv2.dilate(img_crop, None, element, iterations=2)
             img_crop = cv2.cvtColor(img_crop, cv2.COLOR_RGB2GRAY)
+
             t, img_crop = cv2.threshold(img_crop, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
             # img_crop = clear_border(img_crop)
+            """
 
             text = pytesseract.image_to_string(img_crop)
-            print("OCR: " + text)
+            print("OCR Tesseract: " + text)
+            reader = easyocr.Reader(["en", "de"])
+            text = reader.readtext(np.asarray(img_crop))
+            print("OCR Easyocr: " + str(text))
 
             if not args.dont_show:
-                cv2.imshow("img_rgb", img_rgb)
+                # cv2.imshow("img_rgb", img_rgb)
                 cv2.imshow("img_crop", img_crop)
 
         print("secs: {}".format(secs))
-        if not args.dont_show:
-            cv2.imshow("Inference", image)
+        # if not args.dont_show:
+            # cv2.imshow("Inference", image)
         if not args.dont_show & cv2.waitKey() & 0xFF == ord("q"):
             break
         index += 1
