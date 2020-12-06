@@ -74,6 +74,7 @@ def load_images(images_path):
     if input_path_extension in ["jpg", "jpeg", "png"]:
         return [images_path]
     elif input_path_extension == "txt":
+        print("found .txt")
         with open(images_path, "r") as f:
             return f.read().splitlines()
     else:
@@ -228,42 +229,42 @@ def main():
         secs = (time.time() - prev_time)
 
         for label, confidence, bbox in detections:
-            x, y, w, h = bbox
-            print("bbox image:\nx{:.4f} y{:.4f} w{:.4f} h{:.4f}".format(x, y, w, h))
-
             img = cv2.imread(image_name)
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w, c = img.shape
-            print("h{} w{}".format(h, w))
+            # print("h{} w{}".format(h, w))
 
             rx, ry, rw, rh = convert2relative(image, bbox)
-            print("relative:\nx{:.4f} y{:.4f} w{:.4f} h{:.4f}".format(rx, ry, rw, rh))
+            # print("relative:\nx{:.4f} y{:.4f} w{:.4f} h{:.4f}".format(rx, ry, rw, rh))
 
             img_x = int(rx*w)
             img_y = int(ry*h)
             img_w = int(rw*w/2)
             img_h = int(rh*h/2)
             
-            img_y_margin = int(0.025*h)
-            img_x_margin = int(0.025*w)
+            img_y_margin = 0 #int(0.025*h)
+            img_x_margin = 0 #int(0.025*w)
             img_y_min = max(img_y-img_h-img_y_margin, 0)
             img_y_max = min(img_y+img_h+img_y_margin, h-1)
             img_x_min = max(img_x-img_w-img_x_margin, 0)
             img_x_max = min(img_x+img_w+img_x_margin, w-1)
-            print("min/max img:\nx{:.4f} y{:.4f} x{:.4f} y{:.4f}".format(img_x_min, img_y_min, img_x_max, img_y_max))
             img_crop = img_rgb[img_y_min:img_y_max,
                                img_x_min:img_x_max]
+            # print("min/max img:\nx{:.4f} y{:.4f} x{:.4f} y{:.4f}".format(img_x_min, img_y_min, img_x_max, img_y_max))
+
 
             dim = (img_x_max-img_x_min)*2, (img_y_max-img_y_min)*2
             img_crop = cv2.resize(img_crop, dim, interpolation=cv2.INTER_AREA)
 
-            """
+            # sharpen = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+            # img_crop = cv2.filter2D(img_crop, -1, sharpen)
+
             img_crop_pil = Image.fromarray(img_crop)
             enhancer = ImageEnhance.Contrast(img_crop_pil)
-            img_crop_pil = enhancer.enhance(2)
+            img_crop_pil = enhancer.enhance(1.5)
             enhancer = ImageEnhance.Sharpness(img_crop_pil)
-            img_crop_pil = enhancer.enhance(2)
-
+            img_crop_pil = enhancer.enhance(1.5)
+            """
             img_crop = np.asarray(img_crop_pil)
             element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
             img_crop = cv2.erode(img_crop, None, element, iterations=1)
@@ -275,20 +276,25 @@ def main():
             """
 
             text = pytesseract.image_to_string(img_crop)
+            print(image_name)
             print("OCR Tesseract: " + text)
-            reader = easyocr.Reader(["en", "de"])
-            text = reader.readtext(np.asarray(img_crop))
-            print("OCR Easyocr: " + str(text))
+            # reader = easyocr.Reader(["en", "de"])
+            # text = reader.readtext(np.asarray(img_crop))
+            # print("OCR Easyocr: " + str(text))
 
             if not args.dont_show:
                 # cv2.imshow("img_rgb", img_rgb)
                 cv2.imshow("img_crop", img_crop)
+                # cv2.imwrite("img_crop_{}.jpg".format(index), img_crop)
+                # cv2.imwrite("img_{}.jpg".format(index), img)
 
         print("secs: {}".format(secs))
         # if not args.dont_show:
             # cv2.imshow("Inference", image)
-        if not args.dont_show & cv2.waitKey() & 0xFF == ord("q"):
-            break
+        if not args.dont_show:
+            cv2.waitKey(15)
+        # if not args.dont_show & 0xFF == ord("q"):
+        #     break
         index += 1
 
 
